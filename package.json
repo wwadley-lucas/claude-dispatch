@@ -1,0 +1,34 @@
+{
+  "name": "claude-dispatch",
+  "version": "0.1.0",
+  "description": "Context-aware skill router for Claude Code hooks",
+  "type": "module",
+  "bin": {
+    "claude-dispatch": "./bin/cli.js"
+  },
+  "main": "src/router.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": ["claude", "claude-code", "hooks", "skill-router", "context-router"],
+  "author": "Lucas Wadley",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.0.0",
+    "inquirer": "^12.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "README.md",
+    "LICENSE"
+  ]
+}

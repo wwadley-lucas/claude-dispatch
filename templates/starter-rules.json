@@ -1,0 +1,153 @@
+{
+  "version": 2,
+  "config": {
+    "maxMatches": 5,
+    "minScore": 2,
+    "cacheTTL": 300000,
+    "llmFallback": false,
+    "llmTimeout": 5000
+  },
+  "rules": [
+    {
+      "id": "tdd-workflow",
+      "name": "Test-Driven Development",
+      "category": "dev-workflows",
+      "command": "tdd",
+      "enforcement": "suggest",
+      "keywords": ["test", "tdd", "failing test", "red green", "test first", "test driven"],
+      "patterns": ["\\b(write|add|create)\\s+tests?\\s+(first|before)\\b", "\\btdd\\b"],
+      "minMatches": 2,
+      "description": "TDD workflow — write failing tests first, then implement"
+    },
+    {
+      "id": "debugging",
+      "name": "Systematic Debugging",
+      "category": "dev-workflows",
+      "command": "debug",
+      "enforcement": "suggest",
+      "keywords": ["bug", "error", "broken", "failing", "crash", "exception", "stack trace", "debug"],
+      "patterns": ["\\b(fix|debug|investigate|diagnose)\\s+(this|the|a)\\b", "\\bnot\\s+working\\b"],
+      "minMatches": 2,
+      "description": "Systematic debugging with hypothesis-driven investigation"
+    },
+    {
+      "id": "code-review",
+      "name": "Code Review",
+      "category": "code-quality",
+      "command": "code-review",
+      "enforcement": "suggest",
+      "keywords": ["review", "PR", "pull request", "code review", "feedback", "check my code"],
+      "patterns": ["\\breview\\s+(my|this|the)\\s+(code|changes|PR|pull request)\\b"],
+      "minMatches": 2,
+      "description": "Review code for quality, bugs, and best practices"
+    },
+    {
+      "id": "commit-workflow",
+      "name": "Git Commit",
+      "category": "git-workflows",
+      "command": "commit",
+      "enforcement": "suggest",
+      "keywords": ["commit", "push", "branch", "git", "stage", "staged"],
+      "patterns": ["\\b(commit|push)\\s+(this|these|the|my)\\b", "\\bgit\\s+(commit|push|branch)\\b"],
+      "minMatches": 2,
+      "description": "Create git commits with conventional messages"
+    },
+    {
+      "id": "refactoring",
+      "name": "Code Refactoring",
+      "category": "code-quality",
+      "command": "refactor",
+      "enforcement": "suggest",
+      "keywords": ["refactor", "clean up", "simplify", "restructure", "extract", "DRY", "technical debt"],
+      "patterns": ["\\b(refactor|clean\\s+up|simplify)\\s+(this|the|my)\\b"],
+      "minMatches": 2,
+      "description": "Refactor code for clarity, maintainability, and reduced complexity"
+    },
+    {
+      "id": "documentation",
+      "name": "Documentation",
+      "category": "code-quality",
+      "command": "docs",
+      "enforcement": "suggest",
+      "keywords": ["docs", "documentation", "readme", "document", "JSDoc", "docstring", "API docs"],
+      "patterns": ["\\b(add|write|update|create)\\s+(docs|documentation|readme)\\b"],
+      "minMatches": 2,
+      "description": "Write or update documentation, READMEs, and API docs"
+    },
+    {
+      "id": "deployment",
+      "name": "Deployment",
+      "category": "dev-workflows",
+      "command": "deploy",
+      "enforcement": "suggest",
+      "keywords": ["deploy", "release", "ship", "CI/CD", "pipeline", "production", "staging"],
+      "patterns": ["\\bdeploy\\s+to\\s+(production|staging|prod)\\b", "\\b(ship|release)\\s+(this|it)\\b"],
+      "minMatches": 2,
+      "description": "Deploy, release, or ship code to environments"
+    },
+    {
+      "id": "security-audit",
+      "name": "Security Audit",
+      "category": "code-quality",
+      "command": "security",
+      "enforcement": "suggest",
+      "keywords": ["security", "vulnerability", "audit", "CVE", "OWASP", "injection", "XSS", "secrets"],
+      "patterns": ["\\b(security|vulnerability)\\s+(audit|scan|check|review)\\b"],
+      "minMatches": 2,
+      "description": "Audit code for security vulnerabilities and best practices"
+    },
+    {
+      "id": "performance",
+      "name": "Performance Optimization",
+      "category": "dev-workflows",
+      "command": "perf",
+      "enforcement": "suggest",
+      "keywords": ["slow", "optimize", "performance", "bottleneck", "latency", "memory leak", "profiling"],
+      "patterns": ["\\b(too\\s+slow|optimize|speed\\s+up|performance\\s+issue)\\b"],
+      "minMatches": 2,
+      "description": "Investigate and fix performance bottlenecks"
+    },
+    {
+      "id": "database",
+      "name": "Database Operations",
+      "category": "dev-workflows",
+      "command": "database",
+      "enforcement": "suggest",
+      "keywords": ["schema", "migration", "query", "SQL", "database", "index", "table", "ORM"],
+      "patterns": ["\\b(create|add|run)\\s+(a\\s+)?migration\\b", "\\b(database|schema)\\s+(design|change)\\b"],
+      "minMatches": 2,
+      "description": "Database schema design, migrations, and query optimization"
+    },
+    {
+      "id": "api-design",
+      "name": "API Design",
+      "category": "dev-workflows",
+      "command": "api",
+      "enforcement": "suggest",
+      "keywords": ["endpoint", "REST", "GraphQL", "API", "route", "controller", "handler"],
+      "patterns": ["\\b(design|create|add)\\s+(an?\\s+)?(API|endpoint|route)\\b"],
+      "minMatches": 2,
+      "description": "Design and implement API endpoints"
+    },
+    {
+      "id": "project-planning",
+      "name": "Project Planning",
+      "category": "project-management",
+      "command": "plan",
+      "enforcement": "suggest",
+      "keywords": ["plan", "roadmap", "milestone", "architecture", "design", "scope", "requirements"],
+      "patterns": ["\\b(plan|design|architect)\\s+(the|this|a|my)\\b", "\\b(roadmap|milestone)\\b"],
+      "minMatches": 2,
+      "description": "Plan project architecture, milestones, and implementation strategy"
+    }
+  ],
+  "directorySignals": [],
+  "fileTypeSignals": {},
+  "skillSequences": {},
+  "projectMarkers": [
+    { "file": "package.json", "boosts": { "dev-workflows": 1 } },
+    { "file": "pyproject.toml", "boosts": { "dev-workflows": 1 } },
+    { "file": ".planning", "boosts": { "project-management": 2 } },
+    { "absent": ".git", "penalties": { "git-workflows": -2 } }
+  ]
+}
