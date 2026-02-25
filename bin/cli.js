@@ -7,6 +7,7 @@ import { scaffold } from "../src/scaffold.js";
 import { validateFile } from "../src/validate.js";
 import { dryRun, formatDryRun } from "../src/test-runner.js";
 import { buildRule, appendRule } from "../src/rule-builder.js";
+import { resolveOutputPath, executeCreate } from "../src/creator.js";
 import fs from "node:fs";
 
 const require = createRequire(import.meta.url);
@@ -150,6 +151,103 @@ program
     } else {
       console.error(`Failed: ${result.error}`);
       process.exit(1);
+    }
+  });
+
+// --- create ---
+program
+  .command("create")
+  .description("Create a new skill or agent with routing rule")
+  .option("-f, --file <path>", "Path to config file", ".claude/dispatch-rules.json")
+  .action(async (opts) => {
+    const configPath = path.resolve(opts.file);
+    const targetDir = process.cwd();
+
+    if (!fs.existsSync(configPath)) {
+      console.error(`Config not found: ${configPath}`);
+      console.error("Run 'claude-dispatch init' first.");
+      process.exit(1);
+    }
+
+    const { default: inquirer } = await import("inquirer");
+
+    const { type } = await inquirer.prompt([
+      { type: "list", name: "type", message: "What are you creating?", choices: ["skill", "agent"] },
+    ]);
+
+    const answers = await inquirer.prompt([
+      { type: "input", name: "name", message: "Name:", validate: (v) => v.length > 0 || "Required" },
+      { type: "input", name: "description", message: "Description:", validate: (v) => v.length > 0 || "Required" },
+      { type: "input", name: "category", message: "Category (e.g., dev-workflows, code-quality):" },
+      { type: "input", name: "command", message: "Skill command to invoke:" },
+      { type: "input", name: "keywords", message: "Keywords (comma-separated):" },
+      { type: "input", name: "patterns", message: "Regex patterns (comma-separated, optional):" },
+      { type: "list", name: "enforcement", message: "Enforcement level:", choices: ["suggest", "silent", "block"], default: "suggest" },
+      { type: "input", name: "minMatches", message: "Minimum score threshold:", default: "2" },
+    ]);
+
+    // Build rule to get ID for path preview
+    const tempRule = buildRule(answers);
+    const outputPath = resolveOutputPath(targetDir, type, tempRule.id);
+    const relPath = path.relative(targetDir, outputPath);
+
+    const { confirm } = await inquirer.prompt([
+      { type: "confirm", name: "confirm", message: `Write to ${relPath}?`, default: true },
+    ]);
+
+    if (!confirm) {
+      console.log("Cancelled.");
+      process.exit(0);
+    }
+
+    const results = executeCreate(targetDir, configPath, type, answers);
+
+    // Report results
+    for (const step of results.steps) {
+      switch (step.step) {
+        case "regex-check":
+          console.error(`  Regex error: ${step.error}`);
+          process.exit(1);
+          break;
+        case "create-file":
+          if (step.ok) {
+            console.log(`  Created: ${path.relative(targetDir, step.path)}`);
+          } else {
+            console.error(`  File creation failed: ${step.error}`);
+            process.exit(1);
+          }
+          break;
+        case "add-rule":
+          if (step.ok) {
+            console.log(`  Rule added: "${step.ruleId}" → ${path.relative(targetDir, configPath)}`);
+          } else {
+            console.error(`  Rule failed: ${step.error}`);
+            process.exit(1);
+          }
+          break;
+        case "validate":
+          if (step.ok) {
+            console.log("  Validation: passed");
+          } else {
+            console.error("  Validation: FAILED");
+            for (const err of step.errors) {
+              console.error(`    - ${err}`);
+            }
+          }
+          break;
+        case "auto-test":
+          console.log("");
+          if (step.ok) {
+            console.log(`  Auto-test: "${step.prompt}"`);
+            console.log(`  ✓ ${results.ruleId} matched`);
+          } else if (step.error) {
+            console.log(`  Auto-test error: ${step.error}`);
+          } else {
+            console.log(`  Auto-test: "${step.prompt}"`);
+            console.log(`  ✗ ${results.ruleId} did not match — check keywords/threshold`);
+          }
+          break;
+      }
     }
   });
 

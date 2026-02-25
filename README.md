@@ -235,6 +235,39 @@ Running validation... OK
 
 The rule is appended to your config and validated automatically.
 
+### `create`
+
+Create a new skill or agent file **and** its routing rule in one step.
+
+```bash
+npx claude-dispatch create
+```
+
+The wizard walks you through the full flow:
+
+```
+? What are you creating? skill
+? Name: Deploy Helper
+? Description: Guides deployment to staging and production
+? Category: dev-workflows
+? Skill command: deploy-helper
+? Keywords: deploy, staging, production, release
+? Regex patterns (optional): \bdeploy\s+to\b
+? Enforcement: suggest
+? Min score: 2
+
+Write to .claude/commands/deploy-helper.md? (Y/n) Y
+
+  Created: .claude/commands/deploy-helper.md
+  Rule added: "deploy-helper" → .claude/dispatch-rules.json
+  Validation: passed
+
+  Auto-test: "deploy staging production release"
+  ✓ deploy-helper matched
+```
+
+Creates the markdown file (`.claude/commands/` for skills, `.claude/agents/` for agents), adds the routing rule, validates the config, and auto-tests that the new rule matches.
+
 ## Configuration Reference
 
 All routing configuration lives in a single file: `.claude/dispatch-rules.json`.
