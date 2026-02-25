@@ -43,6 +43,11 @@ program
     } else {
       console.log(`  Config: already exists (use --force to overwrite)`);
     }
+    if (result.settingsWired) {
+      console.log(`  Settings: wired hook into ${result.settingsPath}`);
+    } else {
+      console.log("  Settings: hook already registered");
+    }
     console.log("\nDone! Edit .claude/dispatch-rules.json to configure your skill routing.");
   });
 

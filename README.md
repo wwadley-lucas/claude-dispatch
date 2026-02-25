@@ -119,14 +119,14 @@ Matches (2):
      Context signals: (none)
 ```
 
-Then tell Claude Code to use the hook by adding to your project's `.claude/settings.json`:
+The `init` command automatically wires the hook into `.claude/settings.json`, creating the file if needed:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [
+    "UserPromptSubmit": [
       {
-        "matcher": "UserMessage",
+        "matcher": "",
         "command": "node .claude/hooks/context-router.js"
       }
     ]
@@ -134,7 +134,7 @@ Then tell Claude Code to use the hook by adding to your project's `.claude/setti
 }
 ```
 
-The `init` command handles this automatically if a `.claude/settings.json` already exists.
+If `.claude/settings.json` already exists with other settings, `init` merges the hook entry without overwriting your existing configuration.
 
 ## CLI Commands
 

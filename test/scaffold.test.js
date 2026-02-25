@@ -70,4 +70,42 @@ describe("scaffold", () => {
     const rulesContent = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
     expect(rulesContent.custom).toBe(true);
   });
+
+  it("creates .claude/settings.json with hook entry when file does not exist", async () => {
+    await scaffold(tmpDir, {});
+    const settingsPath = path.join(tmpDir, ".claude", "settings.json");
+    expect(fs.existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
+    expect(settings.hooks.UserPromptSubmit[0].command).toBe("node .claude/hooks/context-router.js");
+  });
+
+  it("merges hook into existing settings.json without overwriting other config", async () => {
+    const settingsPath = path.join(tmpDir, ".claude", "settings.json");
+    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify({ permissions: { allow: ["Read"] } }));
+    await scaffold(tmpDir, {});
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    expect(settings.permissions.allow).toEqual(["Read"]);
+    expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
+  });
+
+  it("does not duplicate hook entry on repeated init", async () => {
+    await scaffold(tmpDir, {});
+    const result = await scaffold(tmpDir, {});
+    expect(result.settingsWired).toBe(false);
+    const settingsPath = path.join(tmpDir, ".claude", "settings.json");
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    expect(settings.hooks.UserPromptSubmit).toHaveLength(1);
+  });
+
+  it("does not clobber malformed settings.json", async () => {
+    const settingsPath = path.join(tmpDir, ".claude", "settings.json");
+    fs.mkdirSync(path.join(tmpDir, ".claude"), { recursive: true });
+    fs.writeFileSync(settingsPath, "not valid json {{{");
+    const result = await scaffold(tmpDir, {});
+    expect(result.settingsWired).toBe(false);
+    const raw = fs.readFileSync(settingsPath, "utf8");
+    expect(raw).toBe("not valid json {{{");
+  });
 });
