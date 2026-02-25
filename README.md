@@ -2,9 +2,9 @@
 
 Context-aware skill router for Claude Code hooks.
 
-<!-- Badges: uncomment when published -->
-<!-- [![npm version](https://img.shields.io/npm/v/claude-dispatch.svg)](https://www.npmjs.com/package/claude-dispatch) -->
-<!-- [![license](https://img.shields.io/npm/l/claude-dispatch.svg)](LICENSE) -->
+[![license](https://img.shields.io/github/license/wwadley-lucas/claude-dispatch)](LICENSE)
+[![node](https://img.shields.io/node/v/claude-dispatch)](package.json)
+[![tests](https://img.shields.io/badge/tests-61%20passing-brightgreen)](test/)
 
 ---
 
@@ -15,6 +15,31 @@ claude-dispatch is a routing engine that automatically matches user prompts to r
 The router reads a single config file (`dispatch-rules.json`) that defines your skills, their trigger keywords, regex patterns, and contextual signals like directory paths, file types, and project markers. When a prompt comes in, the router scores it against all rules and returns the top matches with enforcement levels (suggest, silent, or block).
 
 All routing happens in a Node.js hook process outside of Claude's context window. This means **zero token cost** -- the router never consumes Claude tokens for matching. It only adds context to the conversation when a match is found, and even then it is a small structured payload rather than a full skill definition.
+
+## Installation
+
+Install globally from GitHub:
+
+```bash
+npm install -g github:wwadley-lucas/claude-dispatch
+```
+
+This makes the `claude-dispatch` command available system-wide. Requires Node.js >= 18.
+
+### Alternative: clone for development
+
+```bash
+git clone https://github.com/wwadley-lucas/claude-dispatch.git
+cd claude-dispatch
+npm install
+npm link   # makes 'claude-dispatch' available globally
+```
+
+### Verify installation
+
+```bash
+claude-dispatch --version
+```
 
 ## Architecture
 
@@ -57,7 +82,7 @@ All three layers run in the hook process. Layers 1 and 1.5 consume zero Claude t
 ## Quick Start
 
 ```bash
-npx claude-dispatch init
+claude-dispatch init
 ```
 
 This creates two files in your project:
@@ -70,7 +95,7 @@ This creates two files in your project:
 Verify it works:
 
 ```bash
-npx claude-dispatch test "deploy to production"
+claude-dispatch test "deploy to production"
 ```
 
 Expected output:
@@ -118,7 +143,7 @@ The `init` command handles this automatically if a `.claude/settings.json` alrea
 Scaffold the hook and config into your project.
 
 ```bash
-npx claude-dispatch init
+claude-dispatch init
 ```
 
 Creates `.claude/hooks/context-router.js` and `.claude/dispatch-rules.json` (with 12 starter rules). Skips config creation if the file already exists.
@@ -127,15 +152,15 @@ Flags:
 
 | Flag | Description |
 |------|-------------|
-| `--update` | Replace the hook file only. Preserves your `dispatch-rules.json`. Use this to upgrade the router after updating the npm package. |
+| `--update` | Replace the hook file only. Preserves your `dispatch-rules.json`. Use this to upgrade the router after updating (`npm install -g github:wwadley-lucas/claude-dispatch`). |
 | `--force` | Overwrite everything, including config. Prompts for confirmation before replacing an existing `dispatch-rules.json`. |
 
 ```bash
 # Upgrade hook without touching config
-npx claude-dispatch init --update
+claude-dispatch init --update
 
 # Full reset (will prompt before overwriting config)
-npx claude-dispatch init --force
+claude-dispatch init --force
 ```
 
 ### `validate`
@@ -143,7 +168,7 @@ npx claude-dispatch init --force
 Check your `dispatch-rules.json` for errors.
 
 ```bash
-npx claude-dispatch validate
+claude-dispatch validate
 ```
 
 Checks performed:
@@ -165,10 +190,10 @@ Flags:
 
 ```bash
 # Validate default location
-npx claude-dispatch validate
+claude-dispatch validate
 
 # Validate a specific file
-npx claude-dispatch validate -f ./my-rules.json
+claude-dispatch validate -f ./my-rules.json
 ```
 
 ### `test`
@@ -176,7 +201,7 @@ npx claude-dispatch validate -f ./my-rules.json
 Dry-run a prompt through the router and see what matches.
 
 ```bash
-npx claude-dispatch test "write tests before implementing the feature"
+claude-dispatch test "write tests before implementing the feature"
 ```
 
 Shows keyword hits, regex matches, context signal boosts, and the final ranked list. Uses your current working directory for context signal evaluation (directory signals, file types, project markers).
@@ -188,8 +213,8 @@ Flags:
 | `-f <path>` | Use a config file at a custom path. |
 
 ```bash
-npx claude-dispatch test "refactor this module to reduce complexity"
-npx claude-dispatch test -f ./custom-rules.json "check for security vulnerabilities"
+claude-dispatch test "refactor this module to reduce complexity"
+claude-dispatch test -f ./custom-rules.json "check for security vulnerabilities"
 ```
 
 Example output:
@@ -212,7 +237,7 @@ Matches (1):
 Interactively create a new routing rule.
 
 ```bash
-npx claude-dispatch add-rule
+claude-dispatch add-rule
 ```
 
 Walks you through each field:
@@ -240,7 +265,7 @@ The rule is appended to your config and validated automatically.
 Create a new skill or agent file **and** its routing rule in one step.
 
 ```bash
-npx claude-dispatch create
+claude-dispatch create
 ```
 
 The wizard walks you through the full flow:
@@ -521,17 +546,17 @@ If you already have a skill (a `.claude/commands/*.md` file or a plugin skill) a
 
 2. **Run the interactive rule builder:**
    ```bash
-   npx claude-dispatch add-rule
+   claude-dispatch add-rule
    ```
 
 3. **Test it:**
    ```bash
-   npx claude-dispatch test "a prompt that should trigger your skill"
+   claude-dispatch test "a prompt that should trigger your skill"
    ```
 
 4. **Iterate.** If the skill does not match, add more keywords or loosen the regex. If it matches too aggressively, raise `minMatches` or make patterns more specific. Run `test` again to verify.
 
-**Manual alternative:** Edit `.claude/dispatch-rules.json` directly. Add a new object to the `rules` array following the schema, then run `npx claude-dispatch validate` to check for errors.
+**Manual alternative:** Edit `.claude/dispatch-rules.json` directly. Add a new object to the `rules` array following the schema, then run `claude-dispatch validate` to check for errors.
 
 ## How to tell Claude agents to add rules
 
@@ -557,7 +582,7 @@ Rule schema (append to the `rules` array):
 }
 ```
 
-After editing, run `npx claude-dispatch validate` to confirm the config is valid.
+After editing, run `claude-dispatch validate` to confirm the config is valid.
 ```
 
 This lets agents self-register their skills with the router without manual intervention.
@@ -593,7 +618,7 @@ Instructions for Claude when this skill is invoked.
 ### 2. Wire it to the router
 
 ```bash
-npx claude-dispatch add-rule
+claude-dispatch add-rule
 ```
 
 Or manually add to `.claude/dispatch-rules.json`:
@@ -615,8 +640,8 @@ Or manually add to `.claude/dispatch-rules.json`:
 ### 3. Test it
 
 ```bash
-npx claude-dispatch validate
-npx claude-dispatch test "a prompt containing relevant trigger words"
+claude-dispatch validate
+claude-dispatch test "a prompt containing relevant trigger words"
 ```
 
 ### 4. Use it
@@ -631,12 +656,12 @@ Contributions are welcome. Please follow these guidelines:
 2. **Write tests.** New features need tests. Run the test suite with `npm test`.
 3. **Follow existing patterns.** Match the code style, naming conventions, and file organization already in the project.
 4. **Keep changes focused.** One feature or fix per pull request.
-5. **Validate your rules.** If you modify `templates/starter-rules.json`, run `npx claude-dispatch validate -f templates/starter-rules.json`.
+5. **Validate your rules.** If you modify `templates/starter-rules.json`, run `claude-dispatch validate -f templates/starter-rules.json`.
 
 ### Development setup
 
 ```bash
-git clone https://github.com/lucaswadley/claude-dispatch.git
+git clone https://github.com/wwadley-lucas/claude-dispatch.git
 cd claude-dispatch
 npm install
 npm test
