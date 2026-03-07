@@ -1,6 +1,6 @@
 {
   "name": "claude-dispatch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Context-aware skill router for Claude Code hooks",
   "type": "module",
   "bin": {

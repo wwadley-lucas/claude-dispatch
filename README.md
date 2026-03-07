@@ -4,7 +4,7 @@ Context-aware skill router for Claude Code hooks.
 
 [![license](https://img.shields.io/github/license/wwadley-lucas/claude-dispatch)](LICENSE)
 [![node](https://img.shields.io/node/v/claude-dispatch)](package.json)
-[![tests](https://img.shields.io/badge/tests-61%20passing-brightgreen)](test/)
+[![tests](https://img.shields.io/badge/tests-71%20passing-brightgreen)](test/)
 
 ---
 
@@ -73,7 +73,7 @@ Matched skills returned to Claude Code
 with enforcement level and instructions
 ```
 
-**Layer 1** runs keyword substring matching (+1 per hit) and regex pattern matching (+2 per hit) against the raw prompt text. This is fast string/regex work in Node.js.
+**Layer 1** runs keyword word-boundary matching (+1 per hit) and regex pattern matching (+2 per hit) against the raw prompt text. Keywords match whole words only (e.g., "test" matches "write tests" but not "contest"). This is fast string/regex work in Node.js.
 
 **Layer 1.5** takes the Layer 1 results and applies contextual boosts or penalties based on the current working directory, file types present in the directory, project marker files (like `package.json` or `.git`), and skill sequence history (what skill ran last in this session). These signals adjust scores up or down by category.
 
@@ -103,22 +103,16 @@ claude-dispatch test "deploy to production"
 Expected output:
 
 ```
-Testing prompt: "deploy to production"
-Working directory: /your/project
+Prompt: "deploy to production"
+CWD: /your/project
 
-Matches (2):
-  1. deployment (score: 5, layer: 1)
-     Command: deploy
-     Enforcement: suggest
-     Keywords: deploy, production
-     Patterns: /\bdeploy\s+to\s+(production|staging|prod)\b/
-     Context signals: (none)
-
-  2. commit-workflow (score: 2, layer: 1)
-     Command: commit
-     Enforcement: suggest
-     Keywords: push
-     Context signals: (none)
+Matches:
+------------------------------------------------------------
+  1. Deployment (deployment)
+     command: deploy
+     score: 4 (layer1: 4, context: 0)
+     layer: 1
+     matched: deploy, production, /\bdeploy\s+to\s+(production|staging|prod)\b/
 ```
 
 The `init` command automatically wires the hook into `.claude/settings.json`, creating the file if needed:
@@ -155,7 +149,7 @@ Flags:
 | Flag | Description |
 |------|-------------|
 | `--update` | Replace the hook file only. Preserves your `dispatch-rules.json`. Use this to upgrade the router after updating (`npm update -g claude-dispatch`). |
-| `--force` | Overwrite everything, including config. Prompts for confirmation before replacing an existing `dispatch-rules.json`. |
+| `--force` | Overwrite everything including config. No confirmation prompt. |
 
 ```bash
 # Upgrade hook without touching config
@@ -222,16 +216,16 @@ claude-dispatch test -f ./custom-rules.json "check for security vulnerabilities"
 Example output:
 
 ```
-Testing prompt: "write tests before implementing the feature"
-Working directory: /home/user/my-project
+Prompt: "write tests before implementing the feature"
+CWD: /home/user/my-project
 
-Matches (1):
-  1. tdd-workflow (score: 4, layer: 1)
-     Command: tdd
-     Enforcement: suggest
-     Keywords: test, test first
-     Patterns: /\b(write|add|create)\s+tests?\s+(first|before)\b/
-     Context signals: marker:+1
+Matches:
+------------------------------------------------------------
+  1. Test-Driven Development (tdd-workflow)
+     command: superpowers:test-driven-development
+     score: 4 (layer1: 4, context: 0)
+     layer: 1
+     matched: test, tdd, /\b(write|add|create)\s+tests?\s+(first|before)\b/
 ```
 
 ### `add-rule`
@@ -250,11 +244,9 @@ Walks you through each field:
 ? Category: dev-workflows
 ? Command to invoke: my-workflow
 ? Keywords (comma-separated): build, compile, make, webpack
-? Regex patterns (one per line, blank to finish):
-  > \bbuild\s+(this|the)\b
-  >
+? Regex patterns (comma-separated, optional): \bbuild\s+(this|the)\b
 ? Enforcement level: suggest
-? Minimum score override (blank for global default):
+? Minimum score threshold: 2
 
 Rule added to .claude/dispatch-rules.json
 Running validation... OK
@@ -373,7 +365,7 @@ Each rule object:
 | `category` | string | yes | Grouping key for context signal boosts (e.g., `"dev-workflows"`, `"code-quality"`). |
 | `command` | string | yes | The skill command to invoke. Can be a custom command name (`"tdd"`), a namespaced skill (`"superpowers:test-driven-development"`), or any string your skill system recognizes. |
 | `enforcement` | string | yes | One of `"suggest"`, `"silent"`, or `"block"`. See [Enforcement Levels](#enforcement-levels). |
-| `keywords` | string[] | yes | Substring matches against the lowercased prompt. Each hit adds +1 to the score. |
+| `keywords` | string[] | yes | Word-boundary matches against the lowercased prompt. Each hit adds +1 to the score. |
 | `patterns` | string[] | yes | Regular expressions tested against the raw prompt. Each hit adds +2 to the score. Use double-escaped backslashes in JSON (`"\\b"` for `\b`). |
 | `minMatches` | number | no | Override the global `minScore` for this specific rule. If set, this rule uses its own threshold instead of `config.minScore`. |
 | `description` | string | yes | Shown to the user when this rule matches. Keep it concise. |
@@ -450,7 +442,7 @@ The router computes a score for each rule against the incoming prompt:
 final_score = keyword_score + pattern_score + context_score
 ```
 
-1. **Keyword score**: For each keyword in the rule's `keywords` array, if it appears as a substring in the lowercased prompt, add +1.
+1. **Keyword score**: For each keyword in the rule's `keywords` array, if it matches as a whole word (word-boundary) in the lowercased prompt, add +1.
 
 2. **Pattern score**: For each regex in the rule's `patterns` array, if it matches the raw prompt (case-insensitive), add +2.
 
@@ -493,7 +485,7 @@ Final score:   4   (>= minMatches of 2 -> MATCH)
 
 ### Caching
 
-The router caches results by a hash of `prompt (first 200 chars) + cwd`. Cached results expire after `config.cacheTTL` milliseconds (default: 5 minutes). This avoids redundant scoring when the same prompt appears multiple times in quick succession.
+The router caches results by a hash of `prompt + cwd` (prompts are truncated to 10,000 characters before hashing). Cached results expire after `config.cacheTTL` milliseconds (default: 5 minutes). This avoids redundant scoring when the same prompt appears multiple times in quick succession.
 
 ### Skip conditions
 
@@ -649,6 +641,33 @@ claude-dispatch test "a prompt containing relevant trigger words"
 ### 4. Use it
 
 The next time a user sends a prompt that matches your keywords/patterns, the router will suggest the skill automatically.
+
+## Security & Limitations
+
+See [SECURITY-AUDIT.md](SECURITY-AUDIT.md) for the full audit report.
+
+### Layer 2 LLM injection surface
+
+When `llmFallback` is enabled, the user's prompt is interpolated into a classifier prompt sent to `claude --print -m haiku`. A crafted prompt could attempt to force-route to a specific rule. This is mitigated by: (1) Layer 2 is disabled by default, (2) output is filtered to known rule IDs only, and (3) `suggest` enforcement still requires user confirmation. If you enable Layer 2, be aware of this surface.
+
+Layer 2 is intentionally available only in the standalone hook (`templates/hook.js`), not in the library API (`src/router.js`). It requires the `claude` CLI as a subprocess, making it unsuitable for general library consumption.
+
+### Regex pattern performance
+
+Each rule's patterns are executed with a 100ms per-regex timeout (via `vm.runInNewContext`). With many rules and patterns, the aggregate timeout can add up: 10 rules × 3 patterns × 100ms = 3 seconds worst case. To keep routing fast:
+
+- Keep pattern counts low (1-2 per rule is typical).
+- Prefer keywords over patterns when possible — keywords use compiled word-boundary regexes that are much faster.
+- Use `claude-dispatch test` to profile matching latency on representative prompts.
+- The `isUnsafeRegex` check catches most ReDoS patterns, but no heuristic is perfect. Avoid nested quantifiers and overlapping alternations.
+
+### Known limitations
+
+| Limitation | Mitigation |
+|------------|------------|
+| **TOCTOU race in symlink checks** — Check-then-write has an inherent race window where a symlink could be created between the check and the write. | Standard practice; Node.js doesn't expose `O_NOFOLLOW` for `writeFileSync`. Risk requires local attacker with precise timing. |
+| **Read-write race in concurrent access** — Simultaneous hook invocations could race on cache/history files. | Mitigated by atomic writes (tmp file + `renameSync`). Full file locking would require an external dependency, which is disproportionate for a CLI tool. |
+| **Directory listing in context signals** — `detectFileContext` reads the cwd directory listing (filenames only, not contents) to count file extensions. | By design. Only reads the directory the user is already working in, limited to 50 entries, and only counts extensions — no file contents are accessed. |
 
 ## Contributing
 

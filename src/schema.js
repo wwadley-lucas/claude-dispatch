@@ -1,4 +1,5 @@
 // src/schema.js
+// Error convention: returns { valid: boolean, errors: string[] }. Never throws.
 import path from "node:path";
 
 const REQUIRED_RULE_FIELDS = ["id", "name", "category", "command", "enforcement", "keywords", "patterns", "description"];
@@ -16,7 +17,7 @@ export function isUnsafeRegex(pat) {
   }
   // 2. Quantified group containing alternation (overlap risk)
   //    Catches: (a|a)+, (?:a|b)*, (x|xy)+, etc.
-  if (/\((?:\?[:=!])?[^)]*\|[^)]*\)\s*([+*]|\{[^}]*\})/.test(pat)) {
+  if (/\((?:\?[:=!<])?[^)]*\|[^)]*\)\s*([+*]|\{[^}]*\})/.test(pat)) {
     return true;
   }
   return false;
@@ -45,12 +46,12 @@ export function validateConfig(config) {
     const prefix = `rules[${i}]`;
 
     for (const field of REQUIRED_RULE_FIELDS) {
-      if (rule[field] === undefined || rule[field] === null) {
+      if (rule[field] === undefined || rule[field] === null || (field === 'id' && rule[field] === '')) {
         errors.push(`${prefix}: missing required field "${field}"`);
       }
     }
 
-    if (rule.id) {
+    if (rule.id !== undefined && rule.id !== null) {
       if (seenIds.has(rule.id)) {
         errors.push(`${prefix}: duplicate rule ID "${rule.id}"`);
       }
@@ -59,6 +60,13 @@ export function validateConfig(config) {
 
     if (rule.enforcement && !VALID_ENFORCEMENTS.includes(rule.enforcement)) {
       errors.push(`${prefix}: invalid enforcement "${rule.enforcement}" (must be suggest, silent, or block)`);
+    }
+
+    if (rule.keywords !== undefined && !Array.isArray(rule.keywords)) {
+      errors.push(`${prefix}: keywords must be an array, got ${typeof rule.keywords}`);
+    }
+    if (rule.patterns !== undefined && !Array.isArray(rule.patterns)) {
+      errors.push(`${prefix}: patterns must be an array, got ${typeof rule.patterns}`);
     }
 
     if (Array.isArray(rule.keywords) && rule.keywords.some((k) => typeof k !== "string")) {

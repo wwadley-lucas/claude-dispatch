@@ -61,8 +61,8 @@ describe("createFile", () => {
     createFile(filePath, "Test Skill", "A test skill");
     expect(fs.existsSync(filePath)).toBe(true);
     const content = fs.readFileSync(filePath, "utf8");
-    expect(content).toContain("name: Test Skill");
-    expect(content).toContain("description: A test skill");
+    expect(content).toContain('name: "Test Skill"');
+    expect(content).toContain('description: "A test skill"');
     expect(content).toContain("<!-- Add your instructions here -->");
   });
 
@@ -142,8 +142,9 @@ describe("executeCreate", () => {
 
   it("rejects invalid regex patterns", () => {
     const results = executeCreate(tmpDir, configPath, "skill", makeAnswers({ patterns: "(unclosed" }));
-    const regexStep = results.steps.find((s) => s.step === "regex-check");
-    expect(regexStep.ok).toBe(false);
+    // Regex validation now happens in validateConfig via validateFile, reported as a validate step
+    const validateStep = results.steps.find((s) => s.step === "validate");
+    expect(validateStep.ok).toBe(false);
   });
 
   it("rejects duplicate rule IDs", () => {

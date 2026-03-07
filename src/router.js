@@ -1,11 +1,25 @@
 // src/router.js
+// Error convention: functions return empty arrays/objects on invalid input (never throw).
+// Callers check result length rather than catching exceptions.
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import vm from "node:vm";
 
 const REGEX_TIMEOUT_MS = 100;
+const MAX_PARENT_DEPTH = 6;
+const MAX_DIR_FILES = 50;
+const MAX_HISTORY_ENTRIES = 10;
+const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const KEYWORD_WEIGHT = 1;
+const PATTERN_WEIGHT = 2;
+const DEFAULT_MAX_MATCHES = 5;
+const DEFAULT_MIN_SCORE = 2;
 const regexTestScript = new vm.Script('new RegExp(pat, "i").test(input)');
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function safeRegexTest(pat, input) {
   try {
@@ -18,19 +32,21 @@ function safeRegexTest(pat, input) {
 // --- Scoring ---
 
 export function scoreRule(rule, promptLower, promptRaw) {
+  if (!rule || typeof rule !== 'object') return { score: 0, matchedTerms: [] };
   let score = 0;
   const matchedTerms = [];
 
-  for (const kw of rule.keywords || []) {
-    if (promptLower.includes(kw.toLowerCase())) {
-      score += 1;
+  for (const kw of (Array.isArray(rule.keywords) ? rule.keywords : [])) {
+    const kwLower = kw.toLowerCase();
+    if (new RegExp("\\b" + escapeRegex(kwLower) + "\\b").test(promptLower)) {
+      score += KEYWORD_WEIGHT;
       matchedTerms.push(kw);
     }
   }
 
-  for (const pat of rule.patterns || []) {
+  for (const pat of (Array.isArray(rule.patterns) ? rule.patterns : [])) {
     if (safeRegexTest(pat, promptRaw)) {
-      score += 2;
+      score += PATTERN_WEIGHT;
       matchedTerms.push(`/${pat}/`);
     }
   }
@@ -44,7 +60,7 @@ export function layer1Match(rules, config, prompt) {
 
   for (const rule of rules) {
     const { score, matchedTerms } = scoreRule(rule, promptLower, prompt);
-    const threshold = rule.minMatches ?? config.minScore ?? 2;
+    const threshold = rule.minMatches ?? config.minScore ?? DEFAULT_MIN_SCORE;
     if (score >= threshold) {
       results.push({
         id: rule.id,
@@ -64,7 +80,7 @@ export function layer1Match(rules, config, prompt) {
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results.slice(0, (config.maxMatches ?? 5) * 2);
+  return results.slice(0, (config.maxMatches ?? DEFAULT_MAX_MATCHES) * 2);
 }
 
 // --- Context Signals ---
@@ -86,7 +102,7 @@ function detectFileContext(cwd, fileTypeSignals) {
   if (!fileTypeSignals) return {};
   const boosts = {};
   try {
-    const files = fs.readdirSync(cwd).slice(0, 50);
+    const files = fs.readdirSync(cwd).slice(0, MAX_DIR_FILES);
     const extCounts = {};
     for (const f of files) {
       const ext = path.extname(f).toLowerCase();
@@ -124,7 +140,7 @@ function detectProjectMarkers(cwd, projectMarkers) {
       // Check cwd and walk up to 5 parents
       let found = false;
       let dir = cwd;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < MAX_PARENT_DEPTH; i++) {
         if (exists(path.join(dir, marker.file))) {
           found = true;
           break;
@@ -142,7 +158,7 @@ function detectProjectMarkers(cwd, projectMarkers) {
     if (marker.absent) {
       let found = false;
       let dir = cwd;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < MAX_PARENT_DEPTH; i++) {
         if (exists(path.join(dir, marker.absent))) {
           found = true;
           break;
@@ -170,7 +186,7 @@ function detectSessionSequence(skillSequences, historyPath) {
     if (!hist.history || hist.history.length === 0) return {};
 
     const lastEntry = hist.history[hist.history.length - 1];
-    if (Date.now() - lastEntry.ts > 2 * 60 * 60 * 1000) return {};
+    if (Date.now() - lastEntry.ts > SESSION_TIMEOUT_MS) return {};
 
     const nextSkills = skillSequences[lastEntry.skill];
     if (!nextSkills) return {};
@@ -194,6 +210,7 @@ function detectSessionSequence(skillSequences, historyPath) {
  */
 export function applyContextSignals(matches, cwd, signals, overrides = {}) {
   if (!matches || matches.length === 0) return matches;
+  if (!signals || typeof signals !== 'object') return matches;
 
   const dirBoosts = overrides.dirBoosts ?? detectDirectoryContext(cwd, signals.directorySignals);
   const fileBoosts = overrides.fileBoosts ?? detectFileContext(cwd, signals.fileTypeSignals);
@@ -243,13 +260,13 @@ const MAX_PROMPT_LENGTH = 10000;
 export function route(prompt, cwd, rulesConfig, options = {}) {
   if (!prompt || prompt.length < 10) return [];
   if (prompt.startsWith("/")) return [];
-  if (prompt.length > MAX_PROMPT_LENGTH) prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
+  const input = prompt.length > MAX_PROMPT_LENGTH ? prompt.slice(0, MAX_PROMPT_LENGTH) : prompt;
 
   const { config, rules } = rulesConfig;
   if (!rules || rules.length === 0) return [];
 
   // Layer 1
-  let matches = layer1Match(rules, config, prompt);
+  let matches = layer1Match(rules, config, input);
 
   // Layer 1.5
   if (matches.length > 0) {
@@ -262,7 +279,7 @@ export function route(prompt, cwd, rulesConfig, options = {}) {
     };
     matches = applyContextSignals(matches, cwd, signals);
     matches.sort((a, b) => b.score - a.score);
-    matches = matches.slice(0, config.maxMatches ?? 5);
+    matches = matches.slice(0, config.maxMatches ?? DEFAULT_MAX_MATCHES);
   }
 
   return matches;
@@ -273,7 +290,7 @@ export function route(prompt, cwd, rulesConfig, options = {}) {
 export function hashPrompt(prompt, cwd) {
   return crypto
     .createHash("md5")
-    .update(prompt + "|" + cwd)
+    .update(prompt + "\0" + cwd)
     .digest("hex");
 }
 
@@ -305,12 +322,14 @@ export function recordMatch(command, historyPath) {
   }
   hist.pid = pid;
   hist.history.push({ skill: command, ts: Date.now() });
-  if (hist.history.length > 10) {
-    hist.history = hist.history.slice(-10);
+  if (hist.history.length > MAX_HISTORY_ENTRIES) {
+    hist.history = hist.history.slice(-MAX_HISTORY_ENTRIES);
   }
 
   try {
-    fs.writeFileSync(historyPath, JSON.stringify(hist), "utf8");
+    const tmp = historyPath + ".tmp." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(hist), "utf8");
+    fs.renameSync(tmp, historyPath);
   } catch {
     // Non-critical — skip
   }

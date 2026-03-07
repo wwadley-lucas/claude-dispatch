@@ -1,4 +1,5 @@
 // src/rule-builder.js
+// Error convention: buildRule() throws on invalid input. appendRule() returns { success, error? }.
 import fs from "node:fs";
 import path from "node:path";
 
@@ -10,6 +11,10 @@ export function buildRule(answers) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
+  if (!id) {
+    throw new Error('Rule name must contain at least one alphanumeric character');
+  }
+
   return {
     id,
     name: answers.name,
@@ -18,7 +23,7 @@ export function buildRule(answers) {
     enforcement: answers.enforcement,
     keywords: answers.keywords.split(",").map((k) => k.trim()).filter(Boolean),
     patterns: answers.patterns ? answers.patterns.split(",").map((p) => p.trim()).filter(Boolean) : [],
-    minMatches: parseInt(answers.minMatches, 10) || 2,
+    minMatches: (() => { const p = parseInt(answers.minMatches, 10); return Number.isNaN(p) ? 2 : p; })(),
     description: answers.description,
   };
 }
@@ -45,6 +50,14 @@ export function appendRule(filePath, rule) {
   }
 
   config.rules.push(rule);
+
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      return { success: false, error: `Refusing to write through symlink: ${filePath}` };
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') return { success: false, error: `Cannot check path: ${e.message}` };
+  }
 
   try {
     const tmpPath = filePath + ".tmp." + process.pid;

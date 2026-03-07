@@ -1,4 +1,6 @@
 // src/scaffold.js
+// Error convention: scaffold() returns a result object (never throws for expected failures).
+// wireSettings() returns { wired: boolean, reason?: string } to distinguish failure modes.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +13,7 @@ const HOOK_ENTRY = {
   command: "node .claude/hooks/context-router.js",
 };
 
-export async function scaffold(targetDir, options = {}) {
+export function scaffold(targetDir, options = {}) {
   const claudeDir = path.join(targetDir, ".claude");
   const hooksDir = path.join(claudeDir, "hooks");
   const hookDest = path.join(hooksDir, "context-router.js");
@@ -33,7 +35,6 @@ export async function scaffold(targetDir, options = {}) {
     if (e.code !== "ENOENT") throw e;
   }
   fs.copyFileSync(hookSrc, hookDest);
-  const hookCreated = true;
 
   // Copy rules (skip if exists, unless --force)
   let rulesCreated = false;
@@ -53,9 +54,9 @@ export async function scaffold(targetDir, options = {}) {
   }
 
   // Wire hook into .claude/settings.json
-  const settingsWired = wireSettings(settingsPath);
+  const settingsResult = wireSettings(settingsPath);
 
-  return { hookCreated, rulesCreated, settingsWired, hookPath: hookDest, rulesPath: rulesDest, settingsPath };
+  return { hookCreated: true, rulesCreated, settingsWired: settingsResult.wired, settingsReason: settingsResult.reason, hookPath: hookDest, rulesPath: rulesDest, settingsPath };
 }
 
 function wireSettings(settingsPath) {
@@ -66,7 +67,7 @@ function wireSettings(settingsPath) {
       settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
     } catch {
       // Malformed JSON — don't clobber it, bail out
-      return false;
+      return { wired: false, reason: 'malformed_json' };
     }
   }
 
@@ -82,10 +83,20 @@ function wireSettings(settingsPath) {
     (h) => h.command === HOOK_ENTRY.command,
   );
   if (alreadyWired) {
-    return false;
+    return { wired: false, reason: 'already_exists' };
+  }
+
+  try {
+    if (fs.lstatSync(settingsPath).isSymbolicLink()) {
+      return { wired: false, reason: 'symlink' };
+    }
+  } catch (e) {
+    if (e.code !== 'ENOENT') return { wired: false, reason: 'error' };
   }
 
   settings.hooks.UserPromptSubmit.push(HOOK_ENTRY);
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
-  return true;
+  const tmp = settingsPath + ".tmp." + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(settings, null, 2) + "\n");
+  fs.renameSync(tmp, settingsPath);
+  return { wired: true };
 }

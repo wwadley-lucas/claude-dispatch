@@ -31,7 +31,7 @@ program
     const targetDir = process.cwd();
     console.log(`Initializing claude-dispatch in ${targetDir}...`);
 
-    const result = await scaffold(targetDir, {
+    const result = scaffold(targetDir, {
       update: opts.update,
       force: opts.force,
     });
@@ -46,6 +46,10 @@ program
     }
     if (result.settingsWired) {
       console.log(`  Settings: wired hook into ${result.settingsPath}`);
+    } else if (result.settingsReason === 'malformed_json') {
+      console.error("  Settings: WARNING — settings.json contains malformed JSON, hook not wired");
+    } else if (result.settingsReason === 'symlink') {
+      console.error("  Settings: WARNING — settings.json is a symlink, hook not wired");
     } else {
       console.log("  Settings: hook already registered");
     }
@@ -196,9 +200,9 @@ program
       { type: "input", name: "minMatches", message: "Minimum score threshold:", default: "2" },
     ]);
 
-    // Build rule to get ID for path preview
-    const tempRule = buildRule(answers);
-    const outputPath = resolveOutputPath(targetDir, type, tempRule.id);
+    // Generate ID inline for path preview (avoids double buildRule() call)
+    const previewId = answers.name.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const outputPath = resolveOutputPath(targetDir, type, previewId);
     const relPath = path.relative(targetDir, outputPath);
 
     const { confirm } = await inquirer.prompt([

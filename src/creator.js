@@ -1,10 +1,11 @@
 // src/creator.js
+// Error convention: returns { steps: [{ step, ok, error? }] }. Individual steps report
+// their own success/failure; the caller inspects steps to determine overall outcome.
 import fs from "node:fs";
 import path from "node:path";
 import { buildRule, appendRule } from "./rule-builder.js";
 import { validateFile } from "./validate.js";
 import { dryRun, formatDryRun } from "./test-runner.js";
-import { isUnsafeRegex } from "./schema.js";
 
 /**
  * Generate a test prompt from keywords for auto-testing.
@@ -23,9 +24,11 @@ export function createFile(filePath, name, description) {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
 
+  const safeName = name.replace(/"/g, '\\"').replace(/\n/g, ' ');
+  const safeDesc = description.replace(/"/g, '\\"').replace(/\n/g, ' ');
   const content = `---
-name: ${name}
-description: ${description}
+name: "${safeName}"
+description: "${safeDesc}"
 ---
 
 <!-- Add your instructions here -->
@@ -59,20 +62,6 @@ export function executeCreate(targetDir, configPath, type, answers) {
   const filePath = resolveOutputPath(targetDir, type, rule.id);
   const results = { filePath, ruleId: rule.id, steps: [] };
 
-  // Validate regex patterns for syntax and ReDoS safety
-  for (const pat of rule.patterns) {
-    try {
-      new RegExp(pat);
-    } catch (e) {
-      results.steps.push({ step: "regex-check", ok: false, error: `Invalid regex "${pat}": ${e.message}` });
-      return results;
-    }
-    if (isUnsafeRegex(pat)) {
-      results.steps.push({ step: "regex-check", ok: false, error: `Unsafe regex (ReDoS risk) "${pat}": avoid nested quantifiers and quantified alternations` });
-      return results;
-    }
-  }
-
   // Create the markdown file
   try {
     createFile(filePath, answers.name, answers.description);
@@ -87,6 +76,8 @@ export function executeCreate(targetDir, configPath, type, answers) {
   if (ruleResult.success) {
     results.steps.push({ step: "add-rule", ok: true, ruleId: ruleResult.ruleId });
   } else {
+    // Clean up the orphaned markdown file
+    try { fs.unlinkSync(filePath); } catch {}
     results.steps.push({ step: "add-rule", ok: false, error: ruleResult.error });
     return results;
   }

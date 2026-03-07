@@ -16,6 +16,22 @@ const vm = require("vm");
 
 const REGEX_TIMEOUT_MS = 100;
 const regexTestScript = new vm.Script('new RegExp(pat, "i").test(input)');
+
+const MAX_PROMPT_LENGTH = 10000;
+const MIN_PROMPT_LENGTH = 10;
+const MAX_PARENT_DEPTH = 6;
+const MAX_DIR_FILES = 50;
+const MAX_HISTORY_ENTRIES = 10;
+const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+const KEYWORD_WEIGHT = 1;
+const PATTERN_WEIGHT = 2;
+const DEFAULT_CACHE_TTL = 300000;
+const DEFAULT_LLM_TIMEOUT = 5000;
+const DEFAULT_MAX_MATCHES = 5;
+const DEFAULT_MIN_SCORE = 2;
+
+function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
 function safeRegexTest(pat, input) {
   try { return regexTestScript.runInNewContext({ pat, input }, { timeout: REGEX_TIMEOUT_MS }); }
   catch { return false; }
@@ -42,7 +58,7 @@ function readStdin() {
       try {
         bytesRead = fs.readSync(0, buf, 0, buf.length);
         if (bytesRead === 0) break;
-        chunks.push(buf.slice(0, bytesRead));
+        chunks.push(buf.subarray(0, bytesRead));
       } catch { break; }
     }
     return Buffer.concat(chunks).toString("utf8");
@@ -51,12 +67,19 @@ function readStdin() {
 
 function loadRules() {
   try {
-    return JSON.parse(fs.readFileSync(RULES_PATH, "utf8"));
+    const rulesFile = JSON.parse(fs.readFileSync(RULES_PATH, "utf8"));
+    if (!rulesFile || !Array.isArray(rulesFile.rules)) return null;
+    // Coerce non-array keywords/patterns to prevent character iteration bug
+    for (const rule of rulesFile.rules) {
+      if (rule.keywords && !Array.isArray(rule.keywords)) rule.keywords = [];
+      if (rule.patterns && !Array.isArray(rule.patterns)) rule.patterns = [];
+    }
+    return rulesFile;
   } catch { return null; }
 }
 
 function hashPrompt(prompt, cwd) {
-  return crypto.createHash("md5").update(prompt + "|" + cwd).digest("hex");
+  return crypto.createHash("md5").update(prompt + "\0" + cwd).digest("hex");
 }
 
 function loadCache() {
@@ -86,10 +109,11 @@ function scoreRule(rule, promptLower, promptRaw) {
   let score = 0;
   const matchedTerms = [];
   for (const kw of rule.keywords || []) {
-    if (promptLower.includes(kw.toLowerCase())) { score += 1; matchedTerms.push(kw); }
+    const kwLower = kw.toLowerCase();
+    if (new RegExp("\\b" + escapeRegex(kwLower) + "\\b").test(promptLower)) { score += KEYWORD_WEIGHT; matchedTerms.push(kw); }
   }
   for (const pat of rule.patterns || []) {
-    if (safeRegexTest(pat, promptRaw)) { score += 2; matchedTerms.push(`/${pat}/`); }
+    if (safeRegexTest(pat, promptRaw)) { score += PATTERN_WEIGHT; matchedTerms.push(`/${pat}/`); }
   }
   return { score, matchedTerms };
 }
@@ -99,7 +123,7 @@ function layer1Match(rules, config, prompt) {
   const results = [];
   for (const rule of rules) {
     const { score, matchedTerms } = scoreRule(rule, promptLower, prompt);
-    const threshold = rule.minMatches ?? config.minScore ?? 2;
+    const threshold = rule.minMatches ?? config.minScore ?? DEFAULT_MIN_SCORE;
     if (score >= threshold) {
       results.push({
         id: rule.id, name: rule.name, category: rule.category, command: rule.command,
@@ -109,7 +133,7 @@ function layer1Match(rules, config, prompt) {
     }
   }
   results.sort((a, b) => b.score - a.score);
-  return results.slice(0, (config.maxMatches ?? 5) * 2);
+  return results.slice(0, (config.maxMatches ?? DEFAULT_MAX_MATCHES) * 2);
 }
 
 // --- Layer 1.5: Context Signals ---
@@ -130,7 +154,7 @@ function detectFileContext(cwd, fileTypeSignals) {
   const boosts = {};
   try {
     const extCounts = {};
-    for (const f of fs.readdirSync(cwd).slice(0, 50)) {
+    for (const f of fs.readdirSync(cwd).slice(0, MAX_DIR_FILES)) {
       const ext = path.extname(f).toLowerCase();
       if (ext) extCounts[ext] = (extCounts[ext] || 0) + 1;
     }
@@ -153,7 +177,7 @@ function detectProjectMarkers(cwd, projectMarkers) {
     if (marker.file) {
       let found = false;
       let dir = cwd;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < MAX_PARENT_DEPTH; i++) {
         if (exists(path.join(dir, marker.file))) { found = true; break; }
         const parent = path.dirname(dir);
         if (parent === dir) break;
@@ -166,7 +190,7 @@ function detectProjectMarkers(cwd, projectMarkers) {
     if (marker.absent) {
       let found = false;
       let dir = cwd;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < MAX_PARENT_DEPTH; i++) {
         if (exists(path.join(dir, marker.absent))) { found = true; break; }
         const parent = path.dirname(dir);
         if (parent === dir) break;
@@ -186,7 +210,7 @@ function detectSessionSequence(skillSequences) {
     const hist = JSON.parse(fs.readFileSync(HISTORY_PATH, "utf8"));
     if (!hist.history || hist.history.length === 0) return {};
     const lastEntry = hist.history[hist.history.length - 1];
-    if (Date.now() - lastEntry.ts > 2 * 60 * 60 * 1000) return {};
+    if (Date.now() - lastEntry.ts > SESSION_TIMEOUT_MS) return {};
     const nextSkills = skillSequences[lastEntry.skill];
     if (!nextSkills) return {};
     const boosts = {};
@@ -233,7 +257,7 @@ function layer2Match(rules, config, prompt) {
 
   try {
     const result = execFileSync("claude", ["--print", "-m", "haiku", "--max-tokens", "200"], {
-      input: classifierPrompt, timeout: config.llmTimeout || 5000, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
+      input: classifierPrompt, timeout: config.llmTimeout ?? DEFAULT_LLM_TIMEOUT, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"],
     });
     const match = result.match(/\[[\s\S]*?\]/);
     if (!match) return [];
@@ -247,13 +271,13 @@ function layer2Match(rules, config, prompt) {
         enforcement: rule.enforcement, description: rule.description,
         score: 0, layer1Score: 0, contextScore: 0, contextSignals: ["llm-classified"], matchedTerms: ["llm-classified"], layer: 2,
       };
-    }).slice(0, config.maxMatches ?? 5);
+    }).slice(0, config.maxMatches ?? DEFAULT_MAX_MATCHES);
   } catch { return []; }
 }
 
 // --- History ---
 
-function recordTopMatch(command) {
+function recordMatch(command) {
   try {
     let hist;
     try { hist = JSON.parse(fs.readFileSync(HISTORY_PATH, "utf8")); } catch { hist = { history: [], pid: null }; }
@@ -261,7 +285,7 @@ function recordTopMatch(command) {
     if (hist.pid && hist.pid !== pid) { hist.history = []; }
     hist.pid = pid;
     hist.history.push({ skill: command, ts: Date.now() });
-    if (hist.history.length > 10) { hist.history = hist.history.slice(-10); }
+    if (hist.history.length > MAX_HISTORY_ENTRIES) { hist.history = hist.history.slice(-MAX_HISTORY_ENTRIES); }
     const tmp = HISTORY_PATH + ".tmp." + process.pid;
     fs.writeFileSync(tmp, JSON.stringify(hist), "utf8");
     fs.renameSync(tmp, HISTORY_PATH);
@@ -300,9 +324,9 @@ function main() {
 
     let prompt = data.user_prompt || "";
     const cwd = data.cwd || process.cwd();
-    if (!prompt || prompt.length < 10) return exit();
+    if (!prompt || prompt.length < MIN_PROMPT_LENGTH) return exit();
     if (prompt.startsWith("/")) return exit();
-    if (prompt.length > 10000) prompt = prompt.slice(0, 10000);
+    if (prompt.length > MAX_PROMPT_LENGTH) prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
 
     const rulesFile = loadRules();
     if (!rulesFile || !rulesFile.rules) {
@@ -310,39 +334,41 @@ function main() {
       return exit();
     }
     const { config, rules } = rulesFile;
+    const cfg = config || {};
+
+    let rulesMtime = 0;
+    try { rulesMtime = fs.statSync(RULES_PATH).mtimeMs; } catch {}
 
     // Cache check
     const hash = hashPrompt(prompt, cwd);
     let cache = loadCache();
-    cache = pruneCache(cache, config.cacheTTL || 300000);
-    if (cache[hash]) {
+    cache = pruneCache(cache, cfg.cacheTTL ?? DEFAULT_CACHE_TTL);
+    if (cache[hash] && cache[hash].rulesMtime === rulesMtime) {
       const cached = cache[hash].matches;
-      if (cached.length > 0) { recordTopMatch(cached[0].command); outputMatches(cached); }
+      if (cached.length > 0) { recordMatch(cached[0].command); outputMatches(cached); }
       return exit();
     }
 
     // Layer 1
-    let matches = layer1Match(rules, config, prompt);
+    let matches = layer1Match(rules, cfg, prompt);
 
     // Layer 1.5
     if (matches.length > 0) {
       matches = applyContextSignals(matches, cwd, rulesFile);
       matches.sort((a, b) => b.score - a.score);
-      matches = matches.slice(0, config.maxMatches ?? 5);
+      matches = matches.slice(0, cfg.maxMatches ?? DEFAULT_MAX_MATCHES);
     }
 
     // Layer 2
-    if (matches.length === 0 && config.llmFallback) {
-      matches = layer2Match(rules, config, prompt);
+    if (matches.length === 0 && cfg.llmFallback) {
+      matches = layer2Match(rules, cfg, prompt);
     }
 
-    if (matches.length > 0) { recordTopMatch(matches[0].command); }
-    if (matches.length > 0 || !config.llmFallback) {
-      cache[hash] = { ts: Date.now(), matches };
-      saveCache(cache);
-    }
+    if (matches.length > 0) { recordMatch(matches[0].command); }
+    cache[hash] = { ts: Date.now(), matches, rulesMtime };
+    saveCache(cache);
     if (matches.length > 0) { outputMatches(matches); } else { exit(); }
-  } catch { console.error("[context-router] internal error"); exit(); }
+  } catch (e) { console.error("[context-router] internal error:", e.message); exit(); }
 }
 
 main();
