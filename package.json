@@ -14,6 +14,10 @@
   "keywords": ["claude", "claude-code", "hooks", "skill-router", "context-router"],
   "author": "Lucas Wadley",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wwadley-lucas/claude-dispatch.git"
+  },
   "dependencies": {
     "commander": "^13.0.0",
     "inquirer": "^12.0.0"
