@@ -16,7 +16,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wwadley-lucas/claude-dispatch.git"
+    "url": "git+https://github.com/wwadley-lucas/claude-dispatch.git"
   },
   "dependencies": {
     "commander": "^13.0.0",
