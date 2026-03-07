@@ -4,6 +4,7 @@ import path from "node:path";
 import { buildRule, appendRule } from "./rule-builder.js";
 import { validateFile } from "./validate.js";
 import { dryRun, formatDryRun } from "./test-runner.js";
+import { isUnsafeRegex } from "./schema.js";
 
 /**
  * Generate a test prompt from keywords for auto-testing.
@@ -30,6 +31,13 @@ description: ${description}
 <!-- Add your instructions here -->
 `;
 
+  try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) {
+      throw new Error(`Refusing to write through symlink: ${filePath}`);
+    }
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
   fs.writeFileSync(filePath, content, "utf8");
 }
 
@@ -51,12 +59,16 @@ export function executeCreate(targetDir, configPath, type, answers) {
   const filePath = resolveOutputPath(targetDir, type, rule.id);
   const results = { filePath, ruleId: rule.id, steps: [] };
 
-  // Validate regex patterns
+  // Validate regex patterns for syntax and ReDoS safety
   for (const pat of rule.patterns) {
     try {
       new RegExp(pat);
     } catch (e) {
       results.steps.push({ step: "regex-check", ok: false, error: `Invalid regex "${pat}": ${e.message}` });
+      return results;
+    }
+    if (isUnsafeRegex(pat)) {
+      results.steps.push({ step: "regex-check", ok: false, error: `Unsafe regex (ReDoS risk) "${pat}": avoid nested quantifiers and quantified alternations` });
       return results;
     }
   }

@@ -2,6 +2,18 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import vm from "node:vm";
+
+const REGEX_TIMEOUT_MS = 100;
+const regexTestScript = new vm.Script('new RegExp(pat, "i").test(input)');
+
+function safeRegexTest(pat, input) {
+  try {
+    return regexTestScript.runInNewContext({ pat, input }, { timeout: REGEX_TIMEOUT_MS });
+  } catch {
+    return false;
+  }
+}
 
 // --- Scoring ---
 
@@ -17,14 +29,9 @@ export function scoreRule(rule, promptLower, promptRaw) {
   }
 
   for (const pat of rule.patterns || []) {
-    try {
-      const re = new RegExp(pat, "i");
-      if (re.test(promptRaw)) {
-        score += 2;
-        matchedTerms.push(`/${pat}/`);
-      }
-    } catch {
-      // Invalid regex — skip
+    if (safeRegexTest(pat, promptRaw)) {
+      score += 2;
+      matchedTerms.push(`/${pat}/`);
     }
   }
 
@@ -37,7 +44,7 @@ export function layer1Match(rules, config, prompt) {
 
   for (const rule of rules) {
     const { score, matchedTerms } = scoreRule(rule, promptLower, prompt);
-    const threshold = rule.minMatches || config.minScore || 2;
+    const threshold = rule.minMatches ?? config.minScore ?? 2;
     if (score >= threshold) {
       results.push({
         id: rule.id,
@@ -57,7 +64,7 @@ export function layer1Match(rules, config, prompt) {
   }
 
   results.sort((a, b) => b.score - a.score);
-  return results.slice(0, (config.maxMatches || 5) * 2);
+  return results.slice(0, (config.maxMatches ?? 5) * 2);
 }
 
 // --- Context Signals ---
@@ -66,15 +73,10 @@ function detectDirectoryContext(cwd, directorySignals) {
   if (!directorySignals) return {};
   const boosts = {};
   for (const entry of directorySignals) {
-    try {
-      const re = new RegExp(entry.pattern);
-      if (re.test(cwd)) {
-        for (const [cat, val] of Object.entries(entry.boosts)) {
-          boosts[cat] = (boosts[cat] || 0) + val;
-        }
+    if (safeRegexTest(entry.pattern, cwd)) {
+      for (const [cat, val] of Object.entries(entry.boosts)) {
+        boosts[cat] = (boosts[cat] || 0) + val;
       }
-    } catch {
-      // Invalid regex — skip
     }
   }
   return boosts;
@@ -236,9 +238,12 @@ export function applyContextSignals(matches, cwd, signals, overrides = {}) {
 
 // --- Main Route Function ---
 
+const MAX_PROMPT_LENGTH = 10000;
+
 export function route(prompt, cwd, rulesConfig, options = {}) {
   if (!prompt || prompt.length < 10) return [];
   if (prompt.startsWith("/")) return [];
+  if (prompt.length > MAX_PROMPT_LENGTH) prompt = prompt.slice(0, MAX_PROMPT_LENGTH);
 
   const { config, rules } = rulesConfig;
   if (!rules || rules.length === 0) return [];
@@ -257,7 +262,7 @@ export function route(prompt, cwd, rulesConfig, options = {}) {
     };
     matches = applyContextSignals(matches, cwd, signals);
     matches.sort((a, b) => b.score - a.score);
-    matches = matches.slice(0, config.maxMatches || 5);
+    matches = matches.slice(0, config.maxMatches ?? 5);
   }
 
   return matches;
@@ -268,7 +273,7 @@ export function route(prompt, cwd, rulesConfig, options = {}) {
 export function hashPrompt(prompt, cwd) {
   return crypto
     .createHash("md5")
-    .update(prompt.slice(0, 200) + "|" + cwd)
+    .update(prompt + "|" + cwd)
     .digest("hex");
 }
 

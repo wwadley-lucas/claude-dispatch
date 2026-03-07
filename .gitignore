@@ -5,3 +5,5 @@ coverage/
 .claude/
 .claude/audits/
 TODO-FIXES.md
+SECURITY-AUDIT.md
+docs/plans/

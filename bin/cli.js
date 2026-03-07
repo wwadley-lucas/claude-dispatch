@@ -8,6 +8,7 @@ import { validateFile } from "../src/validate.js";
 import { dryRun, formatDryRun } from "../src/test-runner.js";
 import { buildRule, appendRule } from "../src/rule-builder.js";
 import { resolveOutputPath, executeCreate } from "../src/creator.js";
+import { isUnsafeRegex } from "../src/schema.js";
 import fs from "node:fs";
 
 const require = createRequire(import.meta.url);
@@ -129,12 +130,16 @@ program
 
     const rule = buildRule(answers);
 
-    // Validate regex patterns
+    // Validate regex patterns for syntax and ReDoS safety
     for (const pat of rule.patterns) {
       try {
         new RegExp(pat);
       } catch (e) {
         console.error(`Invalid regex pattern "${pat}": ${e.message}`);
+        process.exit(1);
+      }
+      if (isUnsafeRegex(pat)) {
+        console.error(`Unsafe regex pattern (ReDoS risk) "${pat}": avoid nested quantifiers and quantified alternations`);
         process.exit(1);
       }
     }

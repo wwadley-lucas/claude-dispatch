@@ -24,7 +24,14 @@ export async function scaffold(targetDir, options = {}) {
   // Create directories
   fs.mkdirSync(hooksDir, { recursive: true });
 
-  // Copy hook (always overwrite on init or update)
+  // Copy hook (always overwrite on init or update, but refuse symlinks)
+  try {
+    if (fs.lstatSync(hookDest).isSymbolicLink()) {
+      throw new Error(`Refusing to write through symlink: ${hookDest}`);
+    }
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+  }
   fs.copyFileSync(hookSrc, hookDest);
   const hookCreated = true;
 
@@ -34,6 +41,13 @@ export async function scaffold(targetDir, options = {}) {
     // --update: only replace hook, never touch rules
     rulesCreated = false;
   } else if (!fs.existsSync(rulesDest) || options.force) {
+    try {
+      if (fs.lstatSync(rulesDest).isSymbolicLink()) {
+        throw new Error(`Refusing to write through symlink: ${rulesDest}`);
+      }
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+    }
     fs.copyFileSync(rulesSrc, rulesDest);
     rulesCreated = true;
   }

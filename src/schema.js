@@ -1,7 +1,26 @@
 // src/schema.js
+import path from "node:path";
 
 const REQUIRED_RULE_FIELDS = ["id", "name", "category", "command", "enforcement", "keywords", "patterns", "description"];
 const VALID_ENFORCEMENTS = ["suggest", "silent", "block"];
+
+/**
+ * Detect potentially unsafe regex patterns that could cause catastrophic backtracking (ReDoS).
+ * Returns true if the pattern is unsafe.
+ */
+export function isUnsafeRegex(pat) {
+  // 1. Nested quantifiers: quantifier inside group, group itself quantified
+  //    Catches: (a+)+, (a*)+, (a?)+, (a{2,})+, (\w+)*, etc.
+  if (/([+*?]|\{[^}]*\})\s*\)[\s\S]*?([+*]|\{[^}]*\})/.test(pat)) {
+    return true;
+  }
+  // 2. Quantified group containing alternation (overlap risk)
+  //    Catches: (a|a)+, (?:a|b)*, (x|xy)+, etc.
+  if (/\((?:\?[:=!])?[^)]*\|[^)]*\)\s*([+*]|\{[^}]*\})/.test(pat)) {
+    return true;
+  }
+  return false;
+}
 
 export function validateConfig(config) {
   const errors = [];
@@ -54,9 +73,8 @@ export function validateConfig(config) {
         } catch {
           errors.push(`${prefix}: invalid regex pattern at index ${j}: "${pat}"`);
         }
-        // ReDoS detection: reject nested quantifiers like (a+)+, (a*)*,  (a{2,})+
-        if (/(\+|\*|\{[^}]*\})\s*\)[\s\S]*?(\+|\*|\{)/.test(pat)) {
-          errors.push(`${prefix}: potentially unsafe regex (nested quantifiers) at index ${j}: "${pat}"`);
+        if (isUnsafeRegex(pat)) {
+          errors.push(`${prefix}: potentially unsafe regex (ReDoS risk) at index ${j}: "${pat}"`);
         }
       }
     }
@@ -71,6 +89,15 @@ export function validateConfig(config) {
         const sig = config.directorySignals[i];
         if (!sig.pattern || typeof sig.pattern !== "string") {
           errors.push(`directorySignals[${i}]: missing or invalid pattern`);
+        } else {
+          try {
+            new RegExp(sig.pattern);
+          } catch {
+            errors.push(`directorySignals[${i}]: invalid regex pattern: "${sig.pattern}"`);
+          }
+          if (isUnsafeRegex(sig.pattern)) {
+            errors.push(`directorySignals[${i}]: potentially unsafe regex (ReDoS risk): "${sig.pattern}"`);
+          }
         }
         if (!sig.boosts || typeof sig.boosts !== "object" || Array.isArray(sig.boosts)) {
           errors.push(`directorySignals[${i}]: missing or invalid boosts object`);
@@ -108,6 +135,25 @@ export function validateConfig(config) {
         const marker = config.projectMarkers[i];
         if (!marker.file && !marker.absent) {
           errors.push(`projectMarkers[${i}]: must have either "file" or "absent" property`);
+        }
+        if (marker.file && (path.isAbsolute(marker.file) || marker.file.includes(".."))) {
+          errors.push(`projectMarkers[${i}]: "file" must be a relative path without ".." segments`);
+        }
+        if (marker.absent && (path.isAbsolute(marker.absent) || marker.absent.includes(".."))) {
+          errors.push(`projectMarkers[${i}]: "absent" must be a relative path without ".." segments`);
+        }
+      }
+    }
+  }
+
+  // Validate optional config numeric fields
+  if (config.config) {
+    const cfg = config.config;
+    const numericFields = { maxMatches: [1, 100], minScore: [0, 100], cacheTTL: [0, 86400000], llmTimeout: [1000, 60000] };
+    for (const [field, [min, max]] of Object.entries(numericFields)) {
+      if (cfg[field] !== undefined) {
+        if (typeof cfg[field] !== "number" || !Number.isFinite(cfg[field]) || cfg[field] < min || cfg[field] > max) {
+          errors.push(`config.${field}: must be a finite number between ${min} and ${max}`);
         }
       }
     }

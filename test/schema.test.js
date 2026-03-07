@@ -65,7 +65,7 @@ describe("validateConfig", () => {
       rules: [{ ...validRule, patterns: ["(a+)+"] }],
     });
     expect(result.valid).toBe(false);
-    expect(result.errors[0]).toMatch(/nested quantifiers/i);
+    expect(result.errors[0]).toMatch(/ReDoS risk/i);
   });
 
   it("accepts safe regex patterns", () => {
