@@ -18,17 +18,19 @@ All routing happens in a Node.js hook process outside of Claude's context window
 
 ## Installation
 
-Install globally from GitHub:
-
 ```bash
-npm install -g github:wwadley-lucas/claude-dispatch
+npm install -g claude-dispatch
 ```
 
 This makes the `claude-dispatch` command available system-wide. Requires Node.js >= 18.
 
-### Alternative: clone for development
+### Alternative: install from GitHub or clone for development
 
 ```bash
+# Install directly from GitHub (latest, including unreleased changes)
+npm install -g github:wwadley-lucas/claude-dispatch
+
+# Or clone for development
 git clone https://github.com/wwadley-lucas/claude-dispatch.git
 cd claude-dispatch
 npm install
@@ -152,7 +154,7 @@ Flags:
 
 | Flag | Description |
 |------|-------------|
-| `--update` | Replace the hook file only. Preserves your `dispatch-rules.json`. Use this to upgrade the router after updating (`npm install -g github:wwadley-lucas/claude-dispatch`). |
+| `--update` | Replace the hook file only. Preserves your `dispatch-rules.json`. Use this to upgrade the router after updating (`npm update -g claude-dispatch`). |
 | `--force` | Overwrite everything, including config. Prompts for confirmation before replacing an existing `dispatch-rules.json`. |
 
 ```bash
