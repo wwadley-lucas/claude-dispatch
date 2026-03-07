@@ -527,7 +527,7 @@ The hook reads from stdin and writes to stdout, following the Claude Code hooks 
         "enforcement": "suggest",
         "description": "Deploy, release, or ship code to environments",
         "score": 5,
-        "keywordScore": 4,
+        "layer1Score": 4,
         "contextScore": 1,
         "contextSignals": ["marker:+1"],
         "layer": 1

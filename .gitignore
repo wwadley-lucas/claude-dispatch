@@ -3,4 +3,5 @@ coverage/
 .DS_Store
 *.log
 .claude/
+.claude/audits/
 TODO-FIXES.md

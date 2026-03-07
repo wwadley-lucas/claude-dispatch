@@ -22,7 +22,7 @@ export function formatDryRun(result) {
     const m = result.matches[i];
     lines.push(`  ${i + 1}. ${m.name} (${m.id})`);
     lines.push(`     command: ${m.command}`);
-    lines.push(`     score: ${m.score} (keyword: ${m.keywordScore}, context: ${m.contextScore})`);
+    lines.push(`     score: ${m.score} (layer1: ${m.layer1Score}, context: ${m.contextScore})`);
     lines.push(`     layer: ${m.layer}`);
     if (m.matchedTerms && m.matchedTerms.length > 0) {
       lines.push(`     matched: ${m.matchedTerms.join(", ")}`);

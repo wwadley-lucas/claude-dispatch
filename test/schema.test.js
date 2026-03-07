@@ -59,6 +59,23 @@ describe("validateConfig", () => {
     expect(result.errors[0]).toMatch(/regex|pattern/i);
   });
 
+  it("rejects ReDoS-vulnerable patterns with nested quantifiers", () => {
+    const result = validateConfig({
+      ...validConfig,
+      rules: [{ ...validRule, patterns: ["(a+)+"] }],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/nested quantifiers/i);
+  });
+
+  it("accepts safe regex patterns", () => {
+    const result = validateConfig({
+      ...validConfig,
+      rules: [{ ...validRule, patterns: ["\\bdeploy\\s+to\\b"] }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
   it("rejects invalid enforcement values", () => {
     const result = validateConfig({
       ...validConfig,

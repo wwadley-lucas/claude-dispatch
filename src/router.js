@@ -9,14 +9,14 @@ export function scoreRule(rule, promptLower, promptRaw) {
   let score = 0;
   const matchedTerms = [];
 
-  for (const kw of rule.keywords) {
+  for (const kw of rule.keywords || []) {
     if (promptLower.includes(kw.toLowerCase())) {
       score += 1;
       matchedTerms.push(kw);
     }
   }
 
-  for (const pat of rule.patterns) {
+  for (const pat of rule.patterns || []) {
     try {
       const re = new RegExp(pat, "i");
       if (re.test(promptRaw)) {
@@ -47,7 +47,7 @@ export function layer1Match(rules, config, prompt) {
         enforcement: rule.enforcement,
         description: rule.description,
         score,
-        keywordScore: score,
+        layer1Score: score,
         contextScore: 0,
         contextSignals: [],
         matchedTerms,
@@ -327,7 +327,7 @@ export function formatOutput(matches) {
         enforcement: m.enforcement,
         description: m.description,
         score: m.score,
-        keywordScore: m.keywordScore,
+        layer1Score: m.layer1Score,
         contextScore: m.contextScore,
         contextSignals: m.contextSignals,
         layer: m.layer,

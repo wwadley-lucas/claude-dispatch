@@ -17,7 +17,19 @@ describe("generateTestPrompt", () => {
 
   it("handles fewer than 4 keywords", () => {
     const result = generateTestPrompt(["test", "debug"]);
+    // "test debug" is exactly 10 chars, so no padding needed
     expect(result).toBe("test debug");
+    expect(result.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("pads short prompts to >= 10 chars", () => {
+    const result = generateTestPrompt(["a", "b"]);
+    expect(result.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("does not pad prompts already >= 10 chars", () => {
+    const result = generateTestPrompt(["deploy", "release", "production", "staging"]);
+    expect(result).toBe("deploy release production staging");
   });
 });
 

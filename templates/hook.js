@@ -73,10 +73,10 @@ function pruneCache(cache, ttl) {
 function scoreRule(rule, promptLower, promptRaw) {
   let score = 0;
   const matchedTerms = [];
-  for (const kw of rule.keywords) {
+  for (const kw of rule.keywords || []) {
     if (promptLower.includes(kw.toLowerCase())) { score += 1; matchedTerms.push(kw); }
   }
-  for (const pat of rule.patterns) {
+  for (const pat of rule.patterns || []) {
     try { if (new RegExp(pat, "i").test(promptRaw)) { score += 2; matchedTerms.push(`/${pat}/`); } } catch {}
   }
   return { score, matchedTerms };
@@ -92,7 +92,7 @@ function layer1Match(rules, config, prompt) {
       results.push({
         id: rule.id, name: rule.name, category: rule.category, command: rule.command,
         enforcement: rule.enforcement, description: rule.description,
-        score, keywordScore: score, contextScore: 0, contextSignals: [], matchedTerms, layer: 1,
+        score, layer1Score: score, contextScore: 0, contextSignals: [], matchedTerms, layer: 1,
       });
     }
   }
@@ -233,7 +233,7 @@ function layer2Match(rules, config, prompt) {
       return {
         id: rule.id, name: rule.name, category: rule.category, command: rule.command,
         enforcement: rule.enforcement, description: rule.description,
-        score: 0, keywordScore: 0, contextScore: 0, contextSignals: ["llm-classified"], matchedTerms: ["llm-classified"], layer: 2,
+        score: 0, layer1Score: 0, contextScore: 0, contextSignals: ["llm-classified"], matchedTerms: ["llm-classified"], layer: 2,
       };
     }).slice(0, config.maxMatches || 5);
   } catch { return []; }
@@ -263,7 +263,7 @@ function outputMatches(matches) {
       matchCount: matches.length,
       matches: matches.map((m) => ({
         id: m.id, name: m.name, command: m.command, enforcement: m.enforcement,
-        description: m.description, score: m.score, keywordScore: m.keywordScore,
+        description: m.description, score: m.score, layer1Score: m.layer1Score,
         contextScore: m.contextScore, contextSignals: m.contextSignals, layer: m.layer,
       })),
       instruction:
@@ -319,10 +319,12 @@ function main() {
     }
 
     if (matches.length > 0) { recordTopMatch(matches[0].command); }
-    cache[hash] = { ts: Date.now(), matches };
-    saveCache(cache);
+    if (matches.length > 0 || !config.llmFallback) {
+      cache[hash] = { ts: Date.now(), matches };
+      saveCache(cache);
+    }
     if (matches.length > 0) { outputMatches(matches); } else { exit(); }
-  } catch { exit(); }
+  } catch (e) { console.error("[context-router]", e.message || e); exit(); }
 }
 
 main();

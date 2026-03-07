@@ -48,10 +48,15 @@ export function validateConfig(config) {
 
     if (Array.isArray(rule.patterns)) {
       for (let j = 0; j < rule.patterns.length; j++) {
+        const pat = rule.patterns[j];
         try {
-          new RegExp(rule.patterns[j]);
+          new RegExp(pat);
         } catch {
-          errors.push(`${prefix}: invalid regex pattern at index ${j}: "${rule.patterns[j]}"`);
+          errors.push(`${prefix}: invalid regex pattern at index ${j}: "${pat}"`);
+        }
+        // ReDoS detection: reject nested quantifiers like (a+)+, (a*)*,  (a{2,})+
+        if (/(\+|\*|\{[^}]*\})\s*\)[\s\S]*?(\+|\*|\{)/.test(pat)) {
+          errors.push(`${prefix}: potentially unsafe regex (nested quantifiers) at index ${j}: "${pat}"`);
         }
       }
     }

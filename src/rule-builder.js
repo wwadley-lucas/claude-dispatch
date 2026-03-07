@@ -1,5 +1,6 @@
 // src/rule-builder.js
 import fs from "node:fs";
+import path from "node:path";
 
 export function buildRule(answers) {
   const id = answers.name
@@ -46,7 +47,9 @@ export function appendRule(filePath, rule) {
   config.rules.push(rule);
 
   try {
-    fs.writeFileSync(filePath, JSON.stringify(config, null, 2) + "\n", "utf8");
+    const tmpPath = filePath + ".tmp." + process.pid;
+    fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2) + "\n", "utf8");
+    fs.renameSync(tmpPath, filePath);
   } catch (e) {
     return { success: false, error: `Cannot write file: ${e.message}` };
   }

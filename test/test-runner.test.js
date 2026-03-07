@@ -30,7 +30,7 @@ describe("formatDryRun", () => {
     const result = {
       matches: [{
         id: "deploy", name: "Deployment", command: "deploy", score: 4,
-        keywordScore: 2, contextScore: 2, matchedTerms: ["deploy", "release"],
+        layer1Score: 2, contextScore: 2, matchedTerms: ["deploy", "release"],
         contextSignals: ["marker:+2"], layer: 1,
       }],
     };

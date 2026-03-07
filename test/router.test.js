@@ -36,6 +36,18 @@ describe("scoreRule", () => {
     const result = scoreRule(rule, "hello world", "hello world");
     expect(result.score).toBe(0);
   });
+
+  it("handles undefined keywords gracefully", () => {
+    const rule = makeRule({ keywords: undefined });
+    const result = scoreRule(rule, "deploy to production", "deploy to production");
+    expect(result.score).toBe(2); // regex \bdeploy\s+to\b matches (+2), no keyword crash
+  });
+
+  it("handles undefined patterns gracefully", () => {
+    const rule = makeRule({ patterns: undefined });
+    const result = scoreRule(rule, "deploy release", "deploy release");
+    expect(result.score).toBe(2); // keywords still match
+  });
 });
 
 describe("layer1Match", () => {

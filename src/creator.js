@@ -10,7 +10,9 @@ import { dryRun, formatDryRun } from "./test-runner.js";
  * Takes the first 4 keywords and joins them.
  */
 export function generateTestPrompt(keywords) {
-  return keywords.slice(0, 4).join(" ");
+  const prompt = keywords.slice(0, 4).join(" ");
+  // route() requires prompts >= 10 chars; pad if needed
+  return prompt.length >= 10 ? prompt : prompt + " test prompt";
 }
 
 /**
